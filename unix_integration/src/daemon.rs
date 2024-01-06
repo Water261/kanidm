@@ -880,98 +880,33 @@ async fn main() -> ExitCode {
             let cachelayer = Arc::new(cl_inner);
 
             // Retroactively update all home_attr dirs to be hidden if set
-            let entries = match read_dir(&cfg.home_prefix) {
-                Ok(entries) => entries.filter(|entry| {
-                    let entry_inner = match entry {
-                        Ok(entry_inner) => entry_inner,
-                        Err(_) => {
-                            error!("Failed to read entry, assuming not a directory");
-                            return false
-                        },
-                    };
-
-                    let file_type = match entry_inner.file_type() {
-                        Ok(file_type) => file_type,
-                        Err(_) => {
-                            error!("Failed to determine file type for entry {:?}, assuming not a directory", entry_inner.file_name());
-                            return false
-                        },
-                    };
-
-                    file_type.is_dir()
-                }),
+            let users = match cachelayer.get_nssaccounts().await {
+                Ok(users) => users,
                 Err(_) => {
-                    error!("Failed to read all entries in home prefix");
+                    error!("Failed to retrieve all accounts controlled by kanidm");
                     return ExitCode::FAILURE
                 }
             };
 
-            let home_attr_dirs = entries.filter(|entry| {
-                let entry_inner = match entry {
-                    Ok(entry_inner) => entry_inner,
-                    Err(_) => {
-                        error!("Failed to read entry, assuming not a directory");
-                        return false
-                    },
+            for user in users {
+                let home_path: Vec<&str> = user.homedir.split_terminator("/").collect();
+                let name = home_path[home_path.len() - 1];
+
+                let new_name = match cfg.hide_home_attr {
+                    true => if !name.starts_with(".") {
+                        format!(".{}", name)
+                    } else { name.into() },
+                    false => if name.starts_with(".") {
+                        name.split_terminator(".").collect::<Vec<&str>>()[0].into()
+                    } else { name.into() }
                 };
 
-                let dir_name = match entry_inner.file_name().into_string() {
-                    Ok(dir_name) => dir_name,
-                    Err(e) => {
-                        error!("Failed to read file name for entry {:?}", e);
-                        return false
-                    },
-                };
+                let new_path = format!("{}{}", cfg.home_prefix, new_name);
 
-                match cfg.home_attr {
-                    HomeAttr::Uuid => {
-                        let matches: Vec<&str> = dir_name.matches("-").collect();
-
-                        matches.len() == 4
-                    },
-                    HomeAttr::Spn => {
-                        let matches: Vec<&str> = dir_name.matches("@").collect();
-
-                        matches.len() == 1
-                    },
-                    HomeAttr::Name => {
-                        // TODO: Need to check whether the dir names exist in cache
-                        error!("Using Name for home_attr isn't supported right now");
-                        false
-                    },
-                }
-            });
-
-            for dir in home_attr_dirs {
-                let dir_inner = match dir {
-                    Ok(dir_inner) => dir_inner,
-                    Err(_) => {
-                        error!("Failed to read entry, assuming not a directory");
-                        return ExitCode::FAILURE
-                    },
-                };
-
-                let file_name = match dir_inner.file_name().into_string() {
-                    Ok(name) => name,
-                    Err(e) => {
-                        error!("Failed to read file name for entry {:?}", e);
-                        return ExitCode::FAILURE
-                    }
-                };
-
-                
-
-                let new_path = if file_name.starts_with(".") {
-                    format!("{}.{}", &cfg.home_prefix, file_name)
-                } else {
-                    format!("{}{}", &cfg.home_prefix, file_name.split_terminator(".").collect::<Vec<&str>>()[0])
-                };
-
-                match rename(dir_inner.path(), new_path) {
+                match rename(user.homedir, new_path) {
                     Ok(_) => (),
                     Err(_) => {
-                        error!("Failed to rename {}", file_name);
-                        // Prevent a expected vs reality clash by exiting early
+                        error!("Failed to apply hide_home_attr.");
                         return ExitCode::FAILURE
                     }
                 };
