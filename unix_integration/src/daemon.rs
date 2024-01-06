@@ -11,7 +11,7 @@
 #![deny(clippy::trivially_copy_pass_by_ref)]
 
 use std::error::Error;
-use std::fs::{metadata, read_dir, rename};
+use std::fs::{metadata, rename};
 use std::io;
 use std::io::{Error as IoError, ErrorKind};
 use std::os::unix::fs::MetadataExt;
@@ -31,7 +31,7 @@ use kanidm_unix_common::db::{Cache, CacheTxn, Db};
 use kanidm_unix_common::idprovider::kanidm::KanidmProvider;
 // use kanidm_unix_common::idprovider::interface::AuthSession;
 use kanidm_unix_common::resolver::Resolver;
-use kanidm_unix_common::unix_config::{HsmType, KanidmUnixdConfig, HomeAttr};
+use kanidm_unix_common::unix_config::{HsmType, KanidmUnixdConfig};
 use kanidm_unix_common::unix_passwd::{parse_etc_group, parse_etc_passwd};
 use kanidm_unix_common::unix_proto::{ClientRequest, ClientResponse, TaskRequest, TaskResponse};
 
@@ -889,15 +889,15 @@ async fn main() -> ExitCode {
             };
 
             for user in users {
-                let home_path: Vec<&str> = user.homedir.split_terminator("/").collect();
+                let home_path: Vec<&str> = user.homedir.split_terminator('/').collect();
                 let name = home_path[home_path.len() - 1];
 
                 let new_name = match cfg.hide_home_attr {
-                    true => if !name.starts_with(".") {
+                    true => if !name.starts_with('.') {
                         format!(".{}", name)
                     } else { name.into() },
-                    false => if name.starts_with(".") {
-                        name.split_terminator(".").collect::<Vec<&str>>()[0].into()
+                    false => if name.starts_with('.') {
+                        name.split_terminator('.').collect::<Vec<&str>>()[0].into()
                     } else { name.into() }
                 };
 
