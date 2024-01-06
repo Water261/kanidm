@@ -23,6 +23,7 @@ struct ConfigInt {
     default_shell: Option<String>,
     home_prefix: Option<String>,
     home_attr: Option<String>,
+    hide_home_attr: Option<bool>,
     home_alias: Option<String>,
     use_etc_skel: Option<bool>,
     uid_attr_map: Option<String>,
@@ -105,6 +106,7 @@ pub struct KanidmUnixdConfig {
     pub default_shell: String,
     pub home_prefix: String,
     pub home_attr: HomeAttr,
+    pub hide_home_attr: bool,
     pub home_alias: Option<HomeAttr>,
     pub use_etc_skel: bool,
     pub uid_attr_map: UidAttr,
@@ -138,6 +140,7 @@ impl Display for KanidmUnixdConfig {
         writeln!(f, "default_shell: {}", self.default_shell)?;
         writeln!(f, "home_prefix: {}", self.home_prefix)?;
         writeln!(f, "home_attr: {}", self.home_attr)?;
+        writeln!(f, "hide_home_attr: {}", self.hide_home_attr)?;
         match self.home_alias {
             Some(val) => writeln!(f, "home_alias: {}", val)?,
             None => writeln!(f, "home_alias: unset")?,
@@ -180,6 +183,7 @@ impl KanidmUnixdConfig {
             default_shell: DEFAULT_SHELL.to_string(),
             home_prefix: DEFAULT_HOME_PREFIX.to_string(),
             home_attr: DEFAULT_HOME_ATTR,
+            hide_home_attr: DEFAULT_HIDE_HOME_ATTR,
             home_alias: DEFAULT_HOME_ALIAS,
             use_etc_skel: DEFAULT_USE_ETC_SKEL,
             uid_attr_map: DEFAULT_UID_ATTR_MAP,
@@ -263,6 +267,7 @@ impl KanidmUnixdConfig {
                     }
                 })
                 .unwrap_or(self.home_attr),
+            hide_home_attr: config.hide_home_attr.unwrap_or(self.hide_home_attr),
             home_alias: config
                 .home_alias
                 .and_then(|v| match v.as_str() {

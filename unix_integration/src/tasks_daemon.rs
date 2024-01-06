@@ -91,6 +91,7 @@ fn create_home_directory(
     home_prefix: &str,
     use_etc_skel: bool,
     use_selinux: bool,
+    hide_home_attr: bool,
 ) -> Result<(), String> {
     // Final sanity check to prevent certain classes of attacks.
     let name = info.name.trim_start_matches('.').replace(['/', '\\'], "");
@@ -103,7 +104,11 @@ fn create_home_directory(
     }
 
     // Actually process the request here.
-    let hd_path_raw = format!("{}{}", home_prefix, name);
+    let hd_path_raw = if hide_home_attr {
+        format!("{}.{}", home_prefix, name)
+    } else {
+        format!("{}{}", home_prefix, name)
+    };
     let hd_path = Path::new(&hd_path_raw);
 
     // Assert the resulting named home path is consistent and correct.
@@ -239,6 +244,7 @@ async fn handle_tasks(stream: UnixStream, cfg: &KanidmUnixdConfig) {
                     &cfg.home_prefix,
                     cfg.use_etc_skel,
                     cfg.selinux,
+                    cfg.hide_home_attr,
                 ) {
                     Ok(()) => TaskResponse::Success,
                     Err(msg) => TaskResponse::Error(msg),

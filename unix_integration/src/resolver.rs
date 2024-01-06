@@ -69,6 +69,7 @@ where
     default_shell: String,
     home_prefix: String,
     home_attr: HomeAttr,
+    hide_home_attr: bool,
     home_alias: Option<HomeAttr>,
     uid_attr_map: UidAttr,
     gid_attr_map: UidAttr,
@@ -102,6 +103,7 @@ where
         default_shell: String,
         home_prefix: String,
         home_attr: HomeAttr,
+        hide_home_attr: bool,
         home_alias: Option<HomeAttr>,
         uid_attr_map: UidAttr,
         gid_attr_map: UidAttr,
@@ -176,6 +178,7 @@ where
             default_shell,
             home_prefix,
             home_attr,
+            hide_home_attr,
             home_alias,
             uid_attr_map,
             gid_attr_map,
@@ -724,10 +727,16 @@ where
 
     #[inline(always)]
     fn token_homedirectory_attr(&self, token: &UserToken) -> String {
-        match self.home_attr {
+        let homedir = match self.home_attr {
             HomeAttr::Uuid => token.uuid.hyphenated().to_string(),
             HomeAttr::Spn => token.spn.as_str().to_string(),
             HomeAttr::Name => token.name.as_str().to_string(),
+        };
+
+        if self.hide_home_attr {
+            format!(".{}", homedir)
+        } else {
+            homedir
         }
     }
 

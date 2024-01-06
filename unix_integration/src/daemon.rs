@@ -11,7 +11,7 @@
 #![deny(clippy::trivially_copy_pass_by_ref)]
 
 use std::error::Error;
-use std::fs::metadata;
+use std::fs::{metadata, read_dir, rename};
 use std::io;
 use std::io::{Error as IoError, ErrorKind};
 use std::os::unix::fs::MetadataExt;
@@ -31,7 +31,7 @@ use kanidm_unix_common::db::{Cache, CacheTxn, Db};
 use kanidm_unix_common::idprovider::kanidm::KanidmProvider;
 // use kanidm_unix_common::idprovider::interface::AuthSession;
 use kanidm_unix_common::resolver::Resolver;
-use kanidm_unix_common::unix_config::{HsmType, KanidmUnixdConfig};
+use kanidm_unix_common::unix_config::{HsmType, KanidmUnixdConfig, HomeAttr};
 use kanidm_unix_common::unix_passwd::{parse_etc_group, parse_etc_passwd};
 use kanidm_unix_common::unix_proto::{ClientRequest, ClientResponse, TaskRequest, TaskResponse};
 
@@ -862,6 +862,7 @@ async fn main() -> ExitCode {
                 cfg.default_shell.clone(),
                 cfg.home_prefix.clone(),
                 cfg.home_attr,
+                cfg.hide_home_attr,
                 cfg.home_alias,
                 cfg.uid_attr_map,
                 cfg.gid_attr_map,
@@ -877,6 +878,104 @@ async fn main() -> ExitCode {
             };
 
             let cachelayer = Arc::new(cl_inner);
+
+            // Retroactively update all home_attr dirs to be hidden if set
+            let entries = match read_dir(&cfg.home_prefix) {
+                Ok(entries) => entries.filter(|entry| {
+                    let entry_inner = match entry {
+                        Ok(entry_inner) => entry_inner,
+                        Err(_) => {
+                            error!("Failed to read entry, assuming not a directory");
+                            return false
+                        },
+                    };
+
+                    let file_type = match entry_inner.file_type() {
+                        Ok(file_type) => file_type,
+                        Err(_) => {
+                            error!("Failed to determine file type for entry {:?}, assuming not a directory", entry_inner.file_name());
+                            return false
+                        },
+                    };
+
+                    file_type.is_dir()
+                }),
+                Err(_) => {
+                    error!("Failed to read all entries in home prefix");
+                    return ExitCode::FAILURE
+                }
+            };
+
+            let home_attr_dirs = entries.filter(|entry| {
+                let entry_inner = match entry {
+                    Ok(entry_inner) => entry_inner,
+                    Err(_) => {
+                        error!("Failed to read entry, assuming not a directory");
+                        return false
+                    },
+                };
+
+                let dir_name = match entry_inner.file_name().into_string() {
+                    Ok(dir_name) => dir_name,
+                    Err(e) => {
+                        error!("Failed to read file name for entry {:?}", e);
+                        return false
+                    },
+                };
+
+                match cfg.home_attr {
+                    HomeAttr::Uuid => {
+                        let matches: Vec<&str> = dir_name.matches("-").collect();
+
+                        matches.len() == 4
+                    },
+                    HomeAttr::Spn => {
+                        let matches: Vec<&str> = dir_name.matches("@").collect();
+
+                        matches.len() == 1
+                    },
+                    HomeAttr::Name => {
+                        // TODO: Need to check whether the dir names exist in cache
+                        error!("Using Name for home_attr isn't supported right now");
+                        false
+                    },
+                }
+            });
+
+            for dir in home_attr_dirs {
+                let dir_inner = match dir {
+                    Ok(dir_inner) => dir_inner,
+                    Err(_) => {
+                        error!("Failed to read entry, assuming not a directory");
+                        return ExitCode::FAILURE
+                    },
+                };
+
+                let file_name = match dir_inner.file_name().into_string() {
+                    Ok(name) => name,
+                    Err(e) => {
+                        error!("Failed to read file name for entry {:?}", e);
+                        return ExitCode::FAILURE
+                    }
+                };
+
+                
+
+                let new_path = if file_name.starts_with(".") {
+                    format!("{}.{}", &cfg.home_prefix, file_name)
+                } else {
+                    format!("{}{}", &cfg.home_prefix, file_name.split_terminator(".").collect::<Vec<&str>>()[0])
+                };
+
+                match rename(dir_inner.path(), new_path) {
+                    Ok(_) => (),
+                    Err(_) => {
+                        error!("Failed to rename {}", file_name);
+                        // Prevent a expected vs reality clash by exiting early
+                        return ExitCode::FAILURE
+                    }
+                };
+            }
 
             // Setup the root-only socket. Take away all other access bits.
             let before = unsafe { umask(0o0077) };

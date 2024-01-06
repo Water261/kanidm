@@ -8,7 +8,7 @@ use kanidm_client::{KanidmClient, KanidmClientBuilder};
 use kanidm_proto::constants::ATTR_ACCOUNT_EXPIRE;
 use kanidm_unix_common::constants::{
     DEFAULT_GID_ATTR_MAP, DEFAULT_HOME_ALIAS, DEFAULT_HOME_ATTR, DEFAULT_HOME_PREFIX,
-    DEFAULT_SHELL, DEFAULT_UID_ATTR_MAP,
+    DEFAULT_SHELL, DEFAULT_UID_ATTR_MAP, DEFAULT_HIDE_HOME_ATTR,
 };
 use kanidm_unix_common::db::{Cache, CacheTxn, Db};
 use kanidm_unix_common::idprovider::interface::Id;
@@ -128,6 +128,7 @@ async fn setup_test(fix_fn: Fixture) -> (Resolver<KanidmProvider>, KanidmClient)
         DEFAULT_SHELL.to_string(),
         DEFAULT_HOME_PREFIX.to_string(),
         DEFAULT_HOME_ATTR,
+        DEFAULT_HIDE_HOME_ATTR,
         DEFAULT_HOME_ALIAS,
         DEFAULT_UID_ATTR_MAP,
         DEFAULT_GID_ATTR_MAP,
